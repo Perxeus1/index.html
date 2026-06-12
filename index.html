@@ -3,50 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Museums Fotobox</title>
+    <title>Fotobox Prototype [WIP]</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
-        video { width: 100%; height: 80vh; object-fit: cover; background: #222; }
-        #flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
-        .trigger-flash { opacity: 1 !important; }
-        #status { font-size: 1.5rem; margin-top: 10px; }
-        canvas { display: none; }
+        :root {
+            --wip-border: 1px solid #333;
+            --accent-color: #ff3b30;
+        }
+        
+        body { 
+            margin: 0; background: #050505; color: #e5e5e5; 
+            font-family: 'Courier New', Courier, monospace; 
+            display: flex; flex-direction: column; height: 100vh; overflow: hidden; 
+        }
+
+        /* Kamera-Bereich */
+        .viewport {
+            position: relative; flex: 1; display: flex; align-items: center; justify-content: center;
+            background: #000; border-bottom: var(--wip-border);
+        }
+        video { width: 100%; height: 100%; object-fit: cover; transition: filter 0.3s ease; }
+        
+        /* High-Quality Vignetten-Überlagerung für Tiefenwirkung */
+        .vignette {
+            position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none;
+            background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 100%);
+        }
+
+        /* Epochen-Filter Definitionen */
+        .era-1920 { filter: grayscale(1) contrast(1.6) brightness(0.85); }
+        .era-1970 { filter: sepia(0.35) contrast(1.1) saturate(1.5) hue-rotate(-15deg); }
+        .era-1990 { filter: contrast(1.2) saturate(1.8) brightness(1.05) hue-rotate(10deg); }
+
+        /* Blitz & Shutter-Animation */
+        #flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; }
+        .flash-active { animation: flashAnim 0.3s ease-out; }
+        @keyframes flashAnim { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+        /* WIP Interface Controls */
+        .controls { padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #0c0c0c; }
+        .era-switcher { display: flex; justify-content: space-between; gap: 10px; }
+        
+        .wip-btn {
+            flex: 1; background: transparent; border: var(--wip-border); color: #888;
+            padding: 12px; font-family: inherit; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
+        }
+        .wip-btn.active { border-color: #fff; color: #fff; background: #151515; }
+        
+        /* Runder Software-Auslöser */
+        .trigger-container { display: flex; justify-content: center; align-items: center; margin-top: 5px; }
+        .software-trigger {
+            width: 65px; height: 65px; background: var(--accent-color); border: none; 
+            border-radius: 50%; cursor: pointer; outline: 4px solid #1a1a1a; transition: transform 0.1s;
+        }
+        .software-trigger:active { transform: scale(0.95); }
+
+        /* Info-Text Overlay (Erscheint NACH dem Foto) */
+        .modal {
+            position: absolute; inset: 0; background: rgba(5,5,5,0.95); 
+            display: flex; flex-direction: column; padding: 30px; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.4s ease; z-index: 10;
+        }
+        .modal.visible { opacity: 1; pointer-events: auto; }
+        .modal-content { max-width: 500px; margin: 0 auto; text-align: left; }
+        .modal-title { font-size: 1.6rem; color: var(--accent-color); margin-bottom: 10px; text-transform: uppercase; }
+        .modal-text { font-size: 1rem; line-height: 1.6; color: #bbb; margin-bottom: 30px; }
+        
+        #previewCanvas { width: 100%; max-height: 250px; object-fit: contain; border: var(--wip-border); margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
-    <video id="webcam" autoplay playsinline></video>
-    <div id="flash"></div>
-    <div id="status">Bereit... Drücke den Button!</div>
-    <canvas id="photoCanvas"></canvas>
+    <!-- Kamera-Vorschau -->
+    <div class="viewport">
+        <video id="webcam" autoplay playsinline class="era-1920"></video>
+        <div class="vignette"></div>
+        <div id="flash"></div>
+    </div>
+
+    <!-- Nach-Auslöser-Infobildschirm -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <canvas id="previewCanvas"></canvas>
+            <div id="modalTitle" class="modal-title">Epoche</div>
+            <div id="modalText" class="modal-text">Text hier...</div>
+            <button class="wip-btn active" onclick="closeModal()">[ WEITER / NEXT ]</button>
+        </div>
+    </div>
+
+    <!-- Interface Steuerung -->
+    <div class="controls">
+        <div class="era-switcher">
+            <button class="wip-btn active" onclick="switchEra('1920', this)">1920s SILENT</button>
+            <button class="wip-btn" onclick="switchEra('1970', this)">1970s ANALOG</button>
+            <button class="wip-btn" onclick="switchEra('1990', this)">1990s CYBER</button>
+        </div>
+        <div class="trigger-container">
+            <button class="software-trigger" onclick="takePhoto()" title="Auslöser"></button>
+        </div>
+    </div>
 
     <script>
         const video = document.getElementById('webcam');
-        const canvas = document.getElementById('photoCanvas');
-        const statusText = document.getElementById('status');
         const flash = document.getElementById('flash');
+        const modal = document.getElementById('infoModal');
+        const previewCanvas = document.getElementById('previewCanvas');
+        
+        // Zustandsdaten der Epochen
+        let currentEra = '1920';
+        const eraData = {
+            '1920': {
+                title: "1920 - Die Ära des Stummfilms",
+                text: "Orthochromatische Filme konnten kein Rotlicht erfassen. Das Ergebnis waren extrem kontrastreiche, dramatische Schwarz-Weiß-Bilder mit tiefer Melancholie."
+            },
+            '1970': {
+                title: "1970 - Das Polaroid-Zeitalter",
+                text: "Sofortbildfotografie brachte warme, chemische Verfärbungen und verwaschene Farben. Perfekt unperfekt – ein analoger Protest gegen die Perfektion."
+            },
+            '1990': {
+                title: "1990 - Die digitale Mutation",
+                text: "Frühe Digitalkameras und Camcorder übersättigten Farben radikal. Der grelle 'Flash-Look' prägte die Rave- und Popkultur dieses Jahrzehnts."
+            }
+        };
 
+        // 1. Kamera-Feed starten
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
             .then(stream => { video.srcObject = stream; })
-            .catch(err => { 
-                statusText.innerText = "Kamera-Fehler: " + err.message;
-            });
+            .catch(err => { alert("Kamera-Fehler: " + err.message); });
 
-        function takePhoto() {
-            statusText.innerText = "CHEESE! 📸";
-            flash.classList.add('trigger-flash');
-            setTimeout(() => flash.classList.remove('trigger-flash'), 150);
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            setTimeout(() => { statusText.innerText = "Bereit für das nächste Foto..."; }, 2000);
+        // 2. Epochen-Umschalter
+        function switchEra(era, buttonElement) {
+            currentEra = era;
+            video.className = 'era-' + era; // Tauscht CSS-Klasse aus
+            
+            // UI-Button Status updaten
+            document.querySelectorAll('.era-switcher .wip-btn').forEach(btn => btn.classList.remove('active'));
+            buttonElement.classList.add('active');
         }
 
+        // 3. Foto-Logik & Info-Text Trigger
+        function takePhoto() {
+            // Blitz-Effekt
+            flash.classList.add('flash-active');
+            setTimeout(() => flash.classList.remove('flash-active'), 300);
+
+            // Canvas-Vorbereitung (Bild einfrieren)
+            previewCanvas.width = video.videoWidth;
+            previewCanvas.height = video.videoHeight;
+            const ctx = previewCanvas.getContext('2d');
+            
+            // MAGIE: Überträgt den exakten CSS-Filter des Videos auf das gespeicherte Bild
+            ctx.filter = getComputedStyle(video).filter;
+            ctx.drawImage(video, 0, 0, previewCanvas.width, previewCanvas.height);
+
+            // Info-Texte dynamisch befüllen basierend auf aktueller Epoche
+            document.getElementById('modalTitle').innerText = eraData[currentEra].title;
+            document.getElementById('modalText').innerText = eraData[currentEra].text;
+
+            // Kurz warten (während des Blitzes), dann Info-Overlay einblenden
+            setTimeout(() => {
+                modal.classList.add('visible');
+            }, 200);
+        }
+
+        function closeModal() {
+            modal.classList.remove('visible');
+        }
+
+        // 4. Arduino-Vorbereitung (Taste '1' löst weiterhin aus)
         document.addEventListener('keydown', (event) => {
-            if (event.key === '1') {
+            if (event.key === '1' && !modal.classList.contains('visible')) {
                 takePhoto();
             }
         });
